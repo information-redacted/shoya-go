@@ -3,14 +3,15 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"log"
+	"strconv"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/rueian/rueidis"
 	"gitlab.com/george/shoya-go/config"
 	"gitlab.com/george/shoya-go/models"
-	"log"
-	"strconv"
-	"time"
 )
 
 var RedisClient rueidis.Client
@@ -59,6 +60,24 @@ func Main() {
 			return c.Status(500).JSON(fiber.Map{
 				"error":      err.Error(),
 				"instanceId": id,
+			})
+		}
+
+		return c.JSON(i)
+	})
+
+	app.Get("/s/:shortName", func(c *fiber.Ctx) error {
+		id := c.Params("shortName")
+		i, err := findInstanceForShortName(id)
+		if err != nil {
+			if err == NotFoundErr {
+				return c.SendStatus(404)
+			}
+
+			fmt.Println(err)
+			return c.Status(500).JSON(fiber.Map{
+				"error":     err.Error(),
+				"shortName": id,
 			})
 		}
 
@@ -212,6 +231,14 @@ func initializeRedis() {
 	}
 
 	RedisClient = redisClient
+
+	if err = RedisClient.Do(context.Background(), redisClient.B().FtInfo().Index("instanceShortNameIdx").Build()).Error(); err != nil {
+		log.Println("Creating index instanceShortNameIdx")
+		RedisClient.Do(context.Background(), RedisClient.B().FtCreate().
+			Index("instanceShortNameIdx").OnJson().Schema().
+			FieldName("$.shortName").As("shortName").Tag().
+			FieldName("$.secureName").As("secureName").Tag().Build())
+	}
 
 	if err = RedisClient.Do(context.Background(), RedisClient.B().FtInfo().Index("instanceWorldIdIdx").Build()).Error(); err != nil {
 		log.Println("Creating index instanceWorldIdIdx")

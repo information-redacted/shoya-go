@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
+	"time"
+
 	"github.com/rueian/rueidis"
 	"gitlab.com/george/shoya-go/models"
-	"time"
 )
 
 var NotFoundErr = errors.New("instance not found")
@@ -14,6 +16,20 @@ var NotFoundErr = errors.New("instance not found")
 func getInstance(id string) (*models.WorldInstance, error) {
 	var i *models.WorldInstance
 	err := RedisClient.Do(RedisCtx, RedisClient.B().JsonGet().Key("instances:"+id).Build()).DecodeJSON(&i)
+	if err != nil {
+		if rueidis.IsRedisNil(err) {
+			return nil, NotFoundErr
+		}
+		fmt.Println(err)
+		return nil, err
+	}
+
+	return i, nil
+}
+
+func findInstanceForShortName(shortName string) (*models.WorldInstance, error) {
+	var i *models.WorldInstance
+	err := RedisClient.Do(RedisCtx, RedisClient.B().FtSearch().Index("instanceShortNameIdx").Query(fmt.Sprintf("@shortName:{%s} @secureName:{wawawawa}", shortName)).Build()).DecodeJSON(&i)
 	if err != nil {
 		if rueidis.IsRedisNil(err) {
 			return nil, NotFoundErr
@@ -93,6 +109,8 @@ func findInstancesPlayerIsIn(playerId string) ([]*models.WorldInstance, error) {
 
 // registerInstance registers a WorldInstance into Redis
 func registerInstance(id, locationString, worldId, instanceType, ownerId string, capacity int) (*models.WorldInstance, error) {
+	secName, err := generateSecureName(fmt.Sprintf("%s:%s", worldId, id))
+
 	i := &models.WorldInstance{
 		ID:              id,
 		LastPing:        time.Now().Unix(),
@@ -103,15 +121,37 @@ func registerInstance(id, locationString, worldId, instanceType, ownerId string,
 		Capacity:        capacity,
 		Players:         []string{},
 		BlockedPlayers:  []models.WorldInstanceBlockedPlayers{},
+		ShortName:       secName,
 	}
 	j, _ := json.Marshal(i)
-	err := RedisClient.Do(RedisCtx, RedisClient.B().JsonSet().Key("instances:"+id).Path(".").Value(string(j)).Build()).Error()
+	err = RedisClient.Do(RedisCtx, RedisClient.B().JsonSet().Key("instances:"+id).Path(".").Value(string(j)).Build()).Error()
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 
 	return i, nil
+}
+
+func generateSecureName(instanceId string) (string, error) {
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+
+	scope := 69420
+
+	result := ""
+	for {
+		if len(result) >= 16 {
+			return result, nil
+		}
+		n := r1.Int() % scope
+
+		// Make sure that the number/byte/letter is inside
+		// the range of printable ASCII characters (excluding space and DEL)
+		if n > 32 && n < 127 {
+			result += string(n)
+		}
+	}
 }
 
 func pingInstance(instanceId string) error {

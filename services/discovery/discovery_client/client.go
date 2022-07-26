@@ -7,9 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gitlab.com/george/shoya-go/models"
 	"io"
 	"net/http"
+
+	"gitlab.com/george/shoya-go/models"
 )
 
 var NotFoundErr = errors.New("discovery: not found")
@@ -32,6 +33,21 @@ func NewDiscovery(url, apiKey string) *Discovery {
 // GetInstance retrieves live information about an instance.
 func (d *Discovery) GetInstance(instance string) *models.WorldInstance {
 	b, err := d.doRequest(http.MethodGet, fmt.Sprintf("%s/%s", d.Url, instance))
+	if err != nil {
+		return nil
+	}
+
+	var i = &models.WorldInstance{}
+	err = json.Unmarshal(b, i)
+	if err != nil {
+		return nil
+	}
+
+	return i
+}
+
+func (d *Discovery) GetInstanceByShortName(shortName string) *models.WorldInstance {
+	b, err := d.doRequest(http.MethodGet, fmt.Sprintf("%s/s/%s", d.Url, shortName))
 	if err != nil {
 		return nil
 	}

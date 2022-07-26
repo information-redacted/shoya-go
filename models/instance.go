@@ -1,10 +1,11 @@
 package models
 
 import (
+	"time"
+
 	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
 	"gitlab.com/george/shoya-go/config"
-	"time"
 )
 
 type WorldInstancePlayerCount struct {
@@ -31,6 +32,7 @@ type WorldInstance struct {
 	Players         []string                 `json:"players"` // A list of players currently in this instance
 	// PlayerTags     []string
 	BlockedPlayers []WorldInstanceBlockedPlayers `json:"blockedPlayers"` // A list of players who are blocked from joining & until when
+	ShortName      string                        `json:shortName`
 }
 
 type InstanceJoinJWTClaims struct {

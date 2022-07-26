@@ -12,6 +12,7 @@ func instanceRoutes(router *fiber.App) {
 	instances.Get("/:instanceId", getInstance)
 	instances.Get("/:instanceId/shortName", getInstanceShortname)
 	instances.Get("/:instanceId/join", joinInstance)
+	instances.Get("/s/:shortName", getInstanceByShortname)
 
 	travel := router.Group("/travel", ApiKeyMiddleware, AuthMiddleware) // <- ?
 
@@ -62,8 +63,8 @@ func getInstance(c *fiber.Ctx) error {
 			"standalonewindows": instance.PlayerCount.PlatformWindows,
 			"android":           instance.PlayerCount.PlatformAndroid,
 		},
-		"secureName":       "", // unknown
-		"shortName":        "", // unknown
+		"secureName":       "",                 // unknown
+		"shortName":        instance.ShortName, // unknown
 		"photonRegion":     i.Region,
 		"region":           i.Region,
 		"canRequestInvite": i.CanRequestInvite, // todo: presence/friends required
@@ -79,10 +80,90 @@ func getInstance(c *fiber.Ctx) error {
 }
 
 func getInstanceShortname(c *fiber.Ctx) error {
+	var instance *models.WorldInstance
+	id := c.Params("instanceId")
+	i, err := models.ParseLocationString(id)
+	if err != nil {
+		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
+	}
+
+	if config.ApiConfiguration.DiscoveryServiceEnabled.Get() {
+		instance = DiscoveryService.GetInstance(id)
+		if instance == nil {
+			return c.Status(404).JSON(models.ErrInstanceNotFoundResponse)
+		}
+	}
+
+	var w models.World
+	tx := config.DB.Find(&w).Where("id = ?", i.WorldID)
+	if tx.Error != nil {
+		if tx.Error == gorm.ErrRecordNotFound {
+			return c.Status(404).JSON(models.ErrWorldNotFoundResponse)
+		}
+		return c.Status(500).JSON(models.MakeErrorResponse(tx.Error.Error(), 500))
+	}
 	return c.JSON(fiber.Map{
-		"shortName":  nil,
-		"secureName": nil,
+		"shortName":  instance.ShortName,
+		"secureName": "wawawawa",
 	})
+}
+
+func getInstanceByShortname(c *fiber.Ctx) error {
+	var instance *models.WorldInstance
+	id := c.Params("shortName")
+
+	if config.ApiConfiguration.DiscoveryServiceEnabled.Get() {
+		instance = DiscoveryService.GetInstanceByShortName(id)
+		if instance == nil {
+			return c.Status(404).JSON(models.ErrInstanceNotFoundResponse)
+		}
+	}
+
+	i, err := models.ParseLocationString(instance.InstanceID)
+	if err != nil {
+		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
+	}
+
+	var w models.World
+	tx := config.DB.Find(&w).Where("id = ?", i.WorldID)
+	if tx.Error != nil {
+		if tx.Error == gorm.ErrRecordNotFound {
+			return c.Status(404).JSON(models.ErrWorldNotFoundResponse)
+		}
+		return c.Status(500).JSON(models.MakeErrorResponse(tx.Error.Error(), 500))
+	}
+
+	instanceResp := fiber.Map{
+		"id":         id,
+		"location":   id,
+		"instanceId": i.LocationString,
+		"name":       i.InstanceID,
+		"worldId":    i.WorldID,
+		"type":       i.InstanceType,
+		"ownerId":    i.OwnerID,
+		"tags":       []string{},
+		"active":     true,
+		"full":       instance.OverCapacity,
+		"n_users":    instance.PlayerCount.Total, // requires redis
+		"capacity":   w.Capacity,
+		"platforms": fiber.Map{
+			"standalonewindows": instance.PlayerCount.PlatformWindows,
+			"android":           instance.PlayerCount.PlatformAndroid,
+		},
+		"secureName":       "",                 // unknown
+		"shortName":        instance.ShortName, // unknown
+		"photonRegion":     i.Region,
+		"region":           i.Region,
+		"canRequestInvite": i.CanRequestInvite, // todo: presence/friends required
+		"permanent":        true,               // unknown -- whether access link is permanent??
+		"strict":           i.IsStrict,
+	}
+
+	if i.InstanceType != "public" {
+		instanceResp[i.InstanceType] = i.OwnerID
+	}
+
+	return c.JSON(instanceResp)
 }
 
 // joinInstance | GET /instances/:instanceId/join
