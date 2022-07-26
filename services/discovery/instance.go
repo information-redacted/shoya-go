@@ -28,17 +28,47 @@ func getInstance(id string) (*models.WorldInstance, error) {
 }
 
 func findInstanceForShortName(shortName string) (*models.WorldInstance, error) {
-	var i *models.WorldInstance
-	err := RedisClient.Do(RedisCtx, RedisClient.B().FtSearch().Index("instanceShortNameIdx").Query(fmt.Sprintf("@shortName:{%s} @secureName:{wawawawa}", shortName)).Build()).DecodeJSON(&i)
+	arr, err := RedisClient.Do(RedisCtx, RedisClient.B().FtSearch().Index("instanceShortNameIdx").Query(fmt.Sprintf("@shortName:{%s}", shortName)).Build()).ToArray()
 	if err != nil {
-		if rueidis.IsRedisNil(err) {
-			return nil, NotFoundErr
-		}
 		fmt.Println(err)
 		return nil, err
 	}
 
-	return i, nil
+	var n int64
+	var p []FtSearchResult
+	n, p, err = parseFtSearch(arr)
+	if err != nil {
+		if err == NotFoundErr {
+			arr, err = RedisClient.Do(RedisCtx, RedisClient.B().FtSearch().Index("instanceShortNameIdx").Query(fmt.Sprintf("@secureName:{%s}", shortName)).Build()).ToArray()
+			if err != nil {
+				fmt.Println(err)
+				return nil, err
+			}
+
+			n, p, err = parseFtSearch(arr)
+			if err != nil {
+				fmt.Println(err)
+				return nil, err
+			}
+		}
+	}
+
+	r := make([]*models.WorldInstance, n)
+	for idx, p := range p {
+		i := &models.WorldInstance{}
+		err = json.Unmarshal([]byte(p.Results["$"]), &i)
+		if err != nil {
+			fmt.Println(err)
+			return nil, err
+		}
+
+		r[idx] = i
+	}
+
+	if len(r) < 0 {
+		return nil, nil
+	}
+	return r[0], nil
 }
 
 func findInstancesForWorldId(worldId, privacy string, includeOverCapacity bool) ([]*models.WorldInstance, error) {
@@ -109,6 +139,7 @@ func findInstancesPlayerIsIn(playerId string) ([]*models.WorldInstance, error) {
 
 // registerInstance registers a WorldInstance into Redis
 func registerInstance(id, locationString, worldId, instanceType, ownerId string, capacity int) (*models.WorldInstance, error) {
+	shortName, err := generateSecureName(fmt.Sprintf("%s:%s", worldId, id))
 	secName, err := generateSecureName(fmt.Sprintf("%s:%s", worldId, id))
 
 	i := &models.WorldInstance{
@@ -121,7 +152,8 @@ func registerInstance(id, locationString, worldId, instanceType, ownerId string,
 		Capacity:        capacity,
 		Players:         []string{},
 		BlockedPlayers:  []models.WorldInstanceBlockedPlayers{},
-		ShortName:       secName,
+		ShortName:       shortName,
+		SecureName:      secName,
 	}
 	j, _ := json.Marshal(i)
 	err = RedisClient.Do(RedisCtx, RedisClient.B().JsonSet().Key("instances:"+id).Path(".").Value(string(j)).Build()).Error()
@@ -141,14 +173,14 @@ func generateSecureName(instanceId string) (string, error) {
 
 	result := ""
 	for {
-		if len(result) >= 16 {
+		if len(result) >= 8 {
 			return result, nil
 		}
 		n := r1.Int() % scope
 
 		// Make sure that the number/byte/letter is inside
 		// the range of printable ASCII characters (excluding space and DEL)
-		if n > 32 && n < 127 {
+		if (n >= 48 && n <= 57) || (n >= 97 && n <= 122) {
 			result += string(n)
 		}
 	}

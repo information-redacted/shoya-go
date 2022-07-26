@@ -136,7 +136,7 @@ func putVisits(c *fiber.Ctx) error {
 		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
 	}
 
-	if r.UserId != u.ID && !u.IsStaff() {
+	if (r.UserId != "" && r.UserId != u.ID) && !u.IsStaff() {
 		return c.Status(400).JSON(models.MakeErrorResponse("can't change someone else's presence", 400))
 	}
 
@@ -177,7 +177,7 @@ func putJoins(c *fiber.Ctx) error {
 		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
 	}
 
-	if r.UserId != u.ID && !u.IsStaff() {
+	if (r.UserId != "" && r.UserId != u.ID) && !u.IsStaff() {
 		return c.Status(400).JSON(models.MakeErrorResponse("can't change someone else's presence", 400))
 	}
 

@@ -80,21 +80,13 @@ func getInstance(c *fiber.Ctx) error {
 }
 
 func getInstanceShortname(c *fiber.Ctx) error {
-	var instance *models.WorldInstance
-	id := c.Params("instanceId")
-	i, err := models.ParseLocationString(id)
+	var w models.World
+
+	i, err := models.ParseLocationString(c.Params("instanceId"))
 	if err != nil {
 		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
 	}
 
-	if config.ApiConfiguration.DiscoveryServiceEnabled.Get() {
-		instance = DiscoveryService.GetInstance(id)
-		if instance == nil {
-			return c.Status(404).JSON(models.ErrInstanceNotFoundResponse)
-		}
-	}
-
-	var w models.World
 	tx := config.DB.Find(&w).Where("id = ?", i.WorldID)
 	if tx.Error != nil {
 		if tx.Error == gorm.ErrRecordNotFound {
@@ -102,9 +94,21 @@ func getInstanceShortname(c *fiber.Ctx) error {
 		}
 		return c.Status(500).JSON(models.MakeErrorResponse(tx.Error.Error(), 500))
 	}
+
+	var instance *models.WorldInstance
+	if config.ApiConfiguration.DiscoveryServiceEnabled.Get() {
+		instance = DiscoveryService.GetInstance(i.ID)
+		if instance == nil {
+			instance = DiscoveryService.RegisterInstance(i.ID, w.Capacity)
+			if instance == nil {
+				return c.Status(500).JSON(models.MakeErrorResponse("Something broke while creating the instance.", 500))
+			}
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"shortName":  instance.ShortName,
-		"secureName": "wawawawa",
+		"secureName": instance.SecureName,
 	})
 }
 
@@ -119,7 +123,7 @@ func getInstanceByShortname(c *fiber.Ctx) error {
 		}
 	}
 
-	i, err := models.ParseLocationString(instance.InstanceID)
+	i, err := models.ParseLocationString(instance.ID)
 	if err != nil {
 		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
 	}
@@ -134,8 +138,8 @@ func getInstanceByShortname(c *fiber.Ctx) error {
 	}
 
 	instanceResp := fiber.Map{
-		"id":         id,
-		"location":   id,
+		"id":         i.ID,
+		"location":   i.LocationString,
 		"instanceId": i.LocationString,
 		"name":       i.InstanceID,
 		"worldId":    i.WorldID,

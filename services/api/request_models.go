@@ -616,11 +616,11 @@ func (r *CreateWorldRequest) GetImageID() (string, error) {
 }
 
 type PutVisitsRequest struct {
-	UserId  string `json:"userId"`
+	UserId  string `json:"userId,omitempty"`
 	WorldId string `json:"worldId"`
 }
 
 type PutJoinsRequest struct {
-	UserId  string `json:"userId"`
+	UserId  string `json:"userId,omitempty"`
 	WorldId string `json:"worldId"`
 }
