@@ -38,7 +38,7 @@ func getInstance(c *fiber.Ctx) error {
 	}
 
 	var w models.World
-	tx := config.DB.Find(&w).Where("id = ?", i.WorldID)
+	tx := config.DB.Where("id = ?", i.WorldID).First(&w)
 	if tx.Error != nil {
 		if tx.Error == gorm.ErrRecordNotFound {
 			return c.Status(404).JSON(models.ErrWorldNotFoundResponse)
@@ -87,7 +87,7 @@ func getInstanceShortname(c *fiber.Ctx) error {
 		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
 	}
 
-	tx := config.DB.Find(&w).Where("id = ?", i.WorldID)
+	tx := config.DB.Where("id = ?", i.WorldID).First(&w)
 	if tx.Error != nil {
 		if tx.Error == gorm.ErrRecordNotFound {
 			return c.Status(404).JSON(models.ErrWorldNotFoundResponse)
@@ -129,7 +129,7 @@ func getInstanceByShortname(c *fiber.Ctx) error {
 	}
 
 	var w models.World
-	tx := config.DB.Find(&w).Where("id = ?", i.WorldID)
+	tx := config.DB.Where("id = ?", i.WorldID).First(&w)
 	if tx.Error != nil {
 		if tx.Error == gorm.ErrRecordNotFound {
 			return c.Status(404).JSON(models.ErrWorldNotFoundResponse)
@@ -180,7 +180,7 @@ func joinInstance(c *fiber.Ctx) error {
 		return c.Status(500).JSON(models.MakeErrorResponse(err.Error(), 500))
 	}
 
-	tx := config.DB.Find(&w).Where("id = ?", instance.WorldID)
+	tx := config.DB.Where("id = ?", instance.WorldID).First(&w)
 	if tx.Error != nil {
 		if tx.Error == gorm.ErrRecordNotFound {
 			return c.Status(404).JSON(models.ErrWorldNotFoundResponse)
